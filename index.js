@@ -1,22 +1,26 @@
 const express = require("express");
 const app = express();
 
-// フォームのデータを使えるようにする
+// フォームデータ使えるように
 app.use(express.urlencoded({ extended: true }));
 
-// 投稿データ（今は一時保存）
+// 投稿データ
 let posts = [];
 
-// ホーム画面
+// 🏠 ホーム
 app.get("/", (req, res) => {
   let html = `
     <h1>ミニSNS</h1>
+
     <form method="POST" action="/post">
       名前: <input name="name" required><br>
       内容: <input name="content" required><br>
       <button type="submit">投稿</button>
     </form>
+
     <hr>
+
+    <p>※リセットは /reset?pass=1234</p>
   `;
 
   posts.forEach(p => {
@@ -26,18 +30,27 @@ app.get("/", (req, res) => {
   res.send(html);
 });
 
-// 投稿処理
+// ✏️ 投稿
 app.post("/post", (req, res) => {
-  posts.unshift({   // ←新しい投稿を上に表示
+  posts.unshift({
     name: req.body.name,
     content: req.body.content
   });
   res.redirect("/");
 });
 
-// 🔥 Render対応（ここが重要）
-const PORT = process.env.PORT || 3000;
+// 🧹 リセット（パスワード付き）
+app.get("/reset", (req, res) => {
+  if (req.query.pass === "1234") {
+    posts = [];
+    res.send("✅ 全投稿をリセットしました");
+  } else {
+    res.send("❌ パスワードが違います");
+  }
+});
 
+// 🔥 Render対応
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("起動！ PORT:" + PORT);
 });
