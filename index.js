@@ -1,16 +1,19 @@
-必須 express要求する("express");
+const express = require("express");
 const app = express();
 
+// フォームのデータを使えるようにする
 app.use(express.urlencoded({ extended: true }));
 
+// 投稿データ（今は一時保存）
 let posts = [];
 
+// ホーム画面
 app.get("/", (req, res) => {
   let html = `
     <h1>ミニSNS</h1>
     <form method="POST" action="/post">
-      名前: <input name="name"><br>
-      内容: <input name="content"><br>
+      名前: <input name="name" required><br>
+      内容: <input name="content" required><br>
       <button type="submit">投稿</button>
     </form>
     <hr>
@@ -23,14 +26,18 @@ app.get("/", (req, res) => {
   res.send(html);
 });
 
+// 投稿処理
 app.post("/post", (req, res) => {
-  posts.push({
+  posts.unshift({   // ←新しい投稿を上に表示
     name: req.body.name,
     content: req.body.content
   });
   res.redirect("/");
 });
 
-app.listen(3000, () => {
-  console.log("起動！");
+// 🔥 Render対応（ここが重要）
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("起動！ PORT:" + PORT);
 });
