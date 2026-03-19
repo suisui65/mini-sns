@@ -20,7 +20,7 @@ app.get("/", (req, res) => {
 
     <hr>
 
-    <p>※リセットは /reset?pass=1234</p>
+    <p>※リセットは /reset?pass=</p>
   `;
 
   posts.forEach(p => {
