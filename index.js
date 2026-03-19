@@ -41,7 +41,7 @@ app.post("/post", (req, res) => {
 
 // 🧹 リセット（パスワード付き）
 app.get("/reset", (req, res) => {
-  if (req.query.pass === "1234") {
+  if (req.query.pass === "0725") {
     posts = [];
     res.send("✅ 全投稿をリセットしました");
   } else {
