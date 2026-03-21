@@ -15,7 +15,7 @@ let postsCollection = null;
 const upload = multer({ storage: multer.memoryStorage() });
 
 // 管理者パス
-const ADMIN_PASS = "1234";
+const ADMIN_PASS = "0725";
 
 // 🔥 DB接続（落ちない仕様）
 async function start() {
