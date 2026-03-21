@@ -1,26 +1,37 @@
 const express = require("express");
-const app = express();
+const { MongoClient } = require("mongodb");
 
-// フォームデータ使えるように
+const app = express();
 app.use(express.urlencoded({ extended: true }));
 
-// 投稿データ
-let posts = [];
+// 🔥 ここに自分のURL貼る
+const uri = "mongodb+srv://suisui:suisui@keigiban.qmrxf6o.mongodb.net/?appName=KEIGIBAN";
+
+// DB接続
+const client = new MongoClient(uri);
+let postsCollection;
+
+async function start() {
+  await client.connect();
+  const db = client.db("sns");
+  postsCollection = db.collection("posts");
+  console.log("DB接続OK");
+}
+start();
 
 // 🏠 ホーム
-app.get("/", (req, res) => {
+app.get("/", async (req, res) => {
+  const posts = await postsCollection.find().sort({ _id: -1 }).toArray();
+
   let html = `
-    <h1>ミニSNS</h1>
+    <h1>ミニSNS（保存版）</h1>
 
     <form method="POST" action="/post">
       名前: <input name="name" required><br>
       内容: <input name="content" required><br>
-      <button type="submit">投稿</button>
+      <button>投稿</button>
     </form>
-
     <hr>
-
-    <p>※リセットは /reset?pass=</p>
   `;
 
   posts.forEach(p => {
@@ -30,27 +41,18 @@ app.get("/", (req, res) => {
   res.send(html);
 });
 
-// ✏️ 投稿
-app.post("/post", (req, res) => {
-  posts.unshift({
+// 📤 投稿
+app.post("/post", async (req, res) => {
+  await postsCollection.insertOne({
     name: req.body.name,
-    content: req.body.content
+    content: req.body.content,
+    time: new Date()
   });
   res.redirect("/");
-});
-
-// 🧹 リセット（パスワード付き）
-app.get("/reset", (req, res) => {
-  if (req.query.pass === "0725") {
-    posts = [];
-    res.send("✅ 全投稿をリセットしました");
-  } else {
-    res.send("❌ パスワードが違います");
-  }
 });
 
 // 🔥 Render対応
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("起動！ PORT:" + PORT);
+  console.log("起動！");
 });
