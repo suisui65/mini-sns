@@ -5,113 +5,138 @@ const multer = require("multer");
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 
-// 🔥 MongoDB URL
+// 🔥 MongoDB URL（自分のに変更）
 const uri = "mongodb+srv://suisui:suisui@keigiban.qmrxf6o.mongodb.net/?appName=KEIGIBAN";
 const client = new MongoClient(uri);
 
-let postsCollection;
+let postsCollection = null;
 
-// 画像アップロード設定（メモリ保存）
+// 画像（メモリ保存）
 const upload = multer({ storage: multer.memoryStorage() });
 
 // 管理者パス
 const ADMIN_PASS = "1234";
 
+// 🔥 DB接続（落ちない仕様）
 async function start() {
-  await client.connect();
-  const db = client.db("sns");
-  postsCollection = db.collection("posts");
-  console.log("DB接続OK");
+  try {
+    await client.connect();
+    const db = client.db("sns");
+    postsCollection = db.collection("posts");
+    console.log("DB接続OK");
+  } catch (e) {
+    console.error("DB接続エラー:", e);
+  }
 }
-start();
+start().catch(console.error);
 
 // 🏠 ホーム
 app.get("/", async (req, res) => {
-  const posts = await postsCollection.find().sort({ _id: -1 }).toArray();
+  try {
+    if (!postsCollection) {
+      return res.send("DB接続中...少し待って更新してね");
+    }
 
-  let html = `
-    <h1>ミニSNS（画像直接投稿）</h1>
+    const posts = await postsCollection.find().sort({ _id: -1 }).toArray();
 
-    <form method="POST" action="/post" enctype="multipart/form-data">
-      名前: <input name="name" required><br>
-      内容: <input name="content" required><br>
-      画像: <input type="file" name="image"><br>
-      <button>投稿</button>
-    </form>
+    let html = `
+      <h1>ミニSNS🔥</h1>
 
-    <hr>
-  `;
+      <form method="POST" action="/post" enctype="multipart/form-data">
+        名前: <input name="name" required><br>
+        内容: <input name="content" required><br>
+        画像: <input type="file" name="image"><br>
+        <button>投稿</button>
+      </form>
 
-  posts.forEach(p => {
-    html += `
-      <div style="margin-bottom:20px;">
-        <b>${p.name}</b>
-        <small>(${new Date(p.time).toLocaleString()})</small><br>
-
-        ${p.content}<br>
-
-        ${p.image ? `<img src="${p.image}" width="150">` : ""}
-
-        <br>
-        👍 ${p.likes || 0}
-
-        <form method="POST" action="/like">
-          <input type="hidden" name="id" value="${p._id}">
-          <button>いいね</button>
-        </form>
-
-        <form method="POST" action="/delete">
-          <input type="hidden" name="id" value="${p._id}">
-          管理者パス: <input name="pass">
-          <button>削除</button>
-        </form>
-      </div>
+      <hr>
     `;
-  });
 
-  res.send(html);
+    posts.forEach(p => {
+      html += `
+        <div style="margin-bottom:20px;">
+          <b>${p.name}</b>
+          <small>(${new Date(p.time).toLocaleString()})</small><br>
+
+          ${p.content}<br>
+
+          ${p.image ? `<img src="${p.image}" width="150">` : ""}
+
+          <br>
+          👍 ${p.likes || 0}
+
+          <form method="POST" action="/like">
+            <input type="hidden" name="id" value="${p._id}">
+            <button>いいね</button>
+          </form>
+
+          <form method="POST" action="/delete">
+            <input type="hidden" name="id" value="${p._id}">
+            管理者パス: <input name="pass">
+            <button>削除</button>
+          </form>
+        </div>
+      `;
+    });
+
+    res.send(html);
+  } catch (e) {
+    res.send("エラー発生: " + e);
+  }
 });
 
-// 📤 投稿（画像をbase64で保存）
+// 📤 投稿
 app.post("/post", upload.single("image"), async (req, res) => {
-  let imageData = null;
+  try {
+    let imageData = null;
 
-  if (req.file) {
-    imageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+    if (req.file) {
+      imageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+    }
+
+    await postsCollection.insertOne({
+      name: req.body.name,
+      content: req.body.content,
+      image: imageData,
+      time: new Date(),
+      likes: 0
+    });
+
+    res.redirect("/");
+  } catch (e) {
+    res.send("投稿エラー: " + e);
   }
-
-  await postsCollection.insertOne({
-    name: req.body.name,
-    content: req.body.content,
-    image: imageData,
-    time: new Date(),
-    likes: 0
-  });
-
-  res.redirect("/");
 });
 
 // 👍 いいね
 app.post("/like", async (req, res) => {
-  await postsCollection.updateOne(
-    { _id: new ObjectId(req.body.id) },
-    { $inc: { likes: 1 } }
-  );
-  res.redirect("/");
+  try {
+    await postsCollection.updateOne(
+      { _id: new ObjectId(req.body.id) },
+      { $inc: { likes: 1 } }
+    );
+    res.redirect("/");
+  } catch (e) {
+    res.send("いいねエラー: " + e);
+  }
 });
 
 // 🗑️ 削除
 app.post("/delete", async (req, res) => {
-  if (req.body.pass === ADMIN_PASS) {
-    await postsCollection.deleteOne({
-      _id: new ObjectId(req.body.id)
-    });
+  try {
+    if (req.body.pass === ADMIN_PASS) {
+      await postsCollection.deleteOne({
+        _id: new ObjectId(req.body.id)
+      });
+    }
+    res.redirect("/");
+  } catch (e) {
+    res.send("削除エラー: " + e);
   }
-  res.redirect("/");
 });
 
-// 🔥 Render対応
+// 🔥 起動（これ重要）
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("起動！");
+  console.log("起動成功した🔥");
 });
