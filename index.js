@@ -13,10 +13,10 @@ const client = new MongoClient(uri);
 
 let postsCollection = null;
 
-// 画像アップロード（制限付き）
+// 画像アップロード（2MB制限）
 const upload = multer({ 
   storage: multer.memoryStorage(),
-  limits: { fileSize: 1024 * 1024 * 2 } // 2MBまで
+  limits: { fileSize: 1024 * 1024 * 2 }
 });
 
 // 管理者パス
@@ -48,7 +48,7 @@ app.get("/", async (req, res) => {
     const usericon = req.cookies.usericon || "";
 
     let html = `
-      <h1>🌠ミニSNS🌠</h1>
+      <h1>🌟ミニSNS🌟</h1>
 
       <h3>👤 ユーザー設定</h3>
       <form method="POST" action="/setuser" enctype="multipart/form-data">
@@ -61,6 +61,9 @@ app.get("/", async (req, res) => {
 
       <h3>📝 投稿</h3>
       <form method="POST" action="/post" enctype="multipart/form-data">
+        <input type="hidden" name="name" value="${username}">
+        <input type="hidden" name="icon" value="${usericon}">
+        
         内容: <input name="content" required><br>
         画像: <input type="file" name="image"><br>
         <button>投稿</button>
@@ -110,7 +113,7 @@ app.get("/", async (req, res) => {
   }
 });
 
-// 👤 ユーザー設定（修正版）
+// 👤 ユーザー設定
 app.post("/setuser", upload.single("icon"), (req, res) => {
   let iconData = req.cookies.usericon || "";
 
@@ -124,7 +127,7 @@ app.post("/setuser", upload.single("icon"), (req, res) => {
   res.redirect("/");
 });
 
-// 📤 投稿
+// 📤 投稿（←ここが修正ポイント）
 app.post("/post", upload.single("image"), async (req, res) => {
   try {
     let imageData = null;
@@ -134,8 +137,8 @@ app.post("/post", upload.single("image"), async (req, res) => {
     }
 
     await postsCollection.insertOne({
-      name: req.cookies.username || "名無し",
-      icon: req.cookies.usericon || "",
+      name: req.body.name || "名前のない呟き者",
+      icon: req.body.icon || "",
       content: req.body.content,
       image: imageData,
       time: new Date(),
@@ -178,5 +181,5 @@ app.post("/delete", async (req, res) => {
 // 🚀 起動
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("起動成功🌠");
+  console.log("起動成功🌟");
 });
