@@ -1,192 +1,186 @@
 const express = require("express");
-const { MongoClient, ObjectId } = require("mongodb");
 const multer = require("multer");
-const cookieParser = require("cookie-parser");
+const { MongoClient, ObjectId } = require("mongodb");
 
 const app = express();
+
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
+app.use(express.json());
+app.use("/uploads", express.static("uploads"));
 
-// 🔥 MongoDB URL
-const uri = "mongodb+srv://suisui:suisui@keigiban.qmrxf6o.mongodb.net/?appName=KEIGIBAN";
-const client = new MongoClient(uri);
+const upload = multer({ dest: "uploads/" });
 
-let postsCollection = null;
-let usersCollection = null;
-
-// 画像アップロード
-const upload = multer({ 
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 1024 * 1024 * 2 }
-});
-
-// 管理者パス
+/* ================================
+   🔑 管理者パスワード（ここ書き換えて！）
+================================ */
 const ADMIN_PASS = "0725";
 
-// DB接続
-async function start() {
-  try {
-    await client.connect();
-    const db = client.db("sns");
-    postsCollection = db.collection("posts");
-    usersCollection = db.collection("users");
-    console.log("DB接続OK");
-  } catch (e) {
-    console.error("DB接続エラー:", e);
-  }
-}
-start().catch(console.error);
+/* ================================
+   🌐 MongoDB接続URL（ここ書き換えて！）
+   例：
+   mongodb+srv://ユーザー名:パスワード@cluster0.xxxx.mongodb.net/?retryWrites=true&w=majority
+================================ */
+const MONGO_URL = "mongodb+srv://suisui:suisui@keigiban.qmrxf6o.mongodb.net/?appName=KEIGIBAN";
+/* ================================ */
 
-// 🏠 ホーム
+let db;
+
+MongoClient.connect(MONGO_URL).then(client => {
+  db = client.db("sns");
+  console.log("DB connected");
+});
+
+let username = "";
+let usericon = "";
+
+/* ===== トップ ===== */
 app.get("/", async (req, res) => {
-  try {
-    if (!postsCollection) {
-      return res.send("DB接続中...");
-    }
 
-    const posts = await postsCollection.find().sort({ _id: -1 }).toArray();
-    const username = req.cookies.username || "";
+  const posts = await db.collection("posts")
+    .find({})
+    .sort({ _id: -1 })
+    .toArray();
 
-    let html = `
-      <h1>ミニSNS🔥（完全版）</h1>
+  let html = `
+  <style>
+  body{margin:0;font-family:sans-serif;background:#e8f6ff;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;background:white;padding:10px;border-bottom:1px solid #ccc;}
+  .app-icon{width:45px;height:45px;border-radius:50%;}
+  .post-box{flex:1;margin:0 10px;display:flex;gap:5px;}
+  .post-box input{flex:1;padding:8px;}
+  .user-box{text-align:right;}
+  .user-icon{width:40px;height:40px;border-radius:50%;}
+  .timeline{max-width:700px;margin:20px auto;}
+  .post{background:white;padding:12px;margin-bottom:10px;border-radius:8px;display:flex;gap:10px;}
+  .post-icon{width:40px;height:40px;border-radius:50%;}
+  .name{font-weight:bold;}
+  .delete{font-size:10px;margin-left:5px;}
+  img.post-img{max-width:200px;margin-top:5px;border-radius:6px;}
 
-      <h3>👤 ユーザー設定</h3>
-      <form method="POST" action="/setuser" enctype="multipart/form-data">
-        名前: <input name="name" value="${username}" required><br>
-        アイコン: <input type="file" name="icon"><br>
-        <button>設定</button>
-      </form>
+  .guide{
+    max-width:700px;
+    margin:20px auto;
+    background:white;
+    padding:10px;
+    border-radius:8px;
+    font-size:13px;
+  }
+  </style>
 
-      <hr>
+  <div class="topbar">
+    <img class="app-icon" src="https://cdn-icons-png.flaticon.com/512/1055/1055687.png">
 
-      <h3>📝 投稿</h3>
-      <form method="POST" action="/post" enctype="multipart/form-data">
-        内容: <input name="content" required><br>
-        画像: <input type="file" name="image"><br>
-        <button>投稿</button>
-      </form>
+    <form class="post-box" method="POST" action="/post" enctype="multipart/form-data">
+      <input type="text" name="content" placeholder="かくこと" required>
+      <input type="file" name="image">
+      <button>かく</button>
+    </form>
 
-      <hr>
-    `;
+    <div class="user-box">
+      <div>${username || "ユーザー未設定"}</div>
+      ${
+        usericon
+        ? `<img class="user-icon" src="${usericon}">`
+        : `<div class="user-icon" style="background:#ccc;display:flex;align-items:center;justify-content:center;">○</div>`
+      }
+    </div>
+  </div>
 
-    posts.forEach(p => {
-      html += `
-        <div style="margin-bottom:20px; display:flex;">
-          
-          ${p.icon 
-            ? `<img src="${p.icon}" width="40" height="40" style="border-radius:50%; margin-right:10px;">`
-            : `<div style="width:40px;height:40px;border-radius:50%;background:#ccc;display:flex;align-items:center;justify-content:center;margin-right:10px;">○</div>`
-          }
+  <!-- 🌊 ガイド -->
+  <div class="guide">
+  <b>P-Drum Aqua 9"</b><br>
+  自由に投稿できるSNS🌊<br><br>
 
-          <div>
-            <b>${p.name}</b>
-            <small>(${new Date(p.time).toLocaleString()})</small><br>
+  ✏️ 投稿 → 上から書いて「書く」<br>
+  👤 名前・アイコン → 下で設定<br>
+  🗑 CL → 投稿削除（パス必要）<br><br>
 
-            ${p.content}<br>
+  🔑 パスワードの場所👇<br>
+  <code>const ADMIN_PASS = "1234";</code><br>
+  👉 ここを書き換え<br><br>
 
-            ${p.image ? `<img src="${p.image}" width="150">` : ""}
+  🌐 データ保存👇<br>
+  <code>const MONGO_URL = "ここにMongoDBのURL";</code><br>
+  👉 MongoDBのURL貼る
+  </div>
 
-            <br>
-            👍 ${p.likes || 0}
+  <div class="timeline">
+  `;
 
-            <form method="POST" action="/like">
-              <input type="hidden" name="id" value="${p._id}">
-              <button>いいね</button>
-            </form>
+  posts.forEach(p => {
+    html += `
+    <div class="post">
+      ${
+        p.icon
+        ? `<img class="post-icon" src="${p.icon}">`
+        : `<div class="post-icon" style="background:#ccc;display:flex;align-items:center;justify-content:center;">○</div>`
+      }
 
-            <form method="POST" action="/delete">
-              <input type="hidden" name="id" value="${p._id}">
-              管理者パス: <input name="pass">
-              <button>削除</button>
-            </form>
-          </div>
+      <div style="flex:1">
+        <div class="name">
+          ${p.name}
+          <form style="display:inline;" method="POST" action="/delete">
+            <input type="hidden" name="id" value="${p._id}">
+            <input name="pass" placeholder="CL" style="width:40px;">
+            <button class="delete">CL</button>
+          </form>
         </div>
-      `;
-    });
 
-    res.send(html);
-  } catch (e) {
-    res.send("エラー: " + e);
-  }
+        <div>${p.content}</div>
+        ${p.image ? `<img class="post-img" src="${p.image}">` : ""}
+      </div>
+    </div>
+    `;
+  });
+
+  html += `
+  </div>
+
+  <hr>
+
+  <h3>ユーザー設定</h3>
+  <form method="POST" action="/setuser" enctype="multipart/form-data">
+    名前 <input name="name">
+    アイコン <input type="file" name="icon">
+    <button>設定</button>
+  </form>
+  `;
+
+  res.send(html);
 });
 
-// 👤 ユーザー設定（DB保存）
-app.post("/setuser", upload.single("icon"), async (req, res) => {
-  try {
-    let iconData = "";
-
-    if (req.file) {
-      iconData = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-    }
-
-    await usersCollection.updateOne(
-      { name: req.body.name },
-      { $set: { icon: iconData } },
-      { upsert: true }
-    );
-
-    res.cookie("username", req.body.name);
-    res.redirect("/");
-  } catch (e) {
-    res.send("ユーザー設定エラー: " + e);
-  }
-});
-
-// 📤 投稿（DBからアイコン取得）
+/* 投稿 */
 app.post("/post", upload.single("image"), async (req, res) => {
-  try {
-    let imageData = null;
+  const image = req.file ? "/uploads/" + req.file.filename : "";
 
-    if (req.file) {
-      imageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-    }
+  await db.collection("posts").insertOne({
+    name: username || "我輩には名がない",
+    icon: usericon,
+    content: req.body.content,
+    image
+  });
 
-    const user = await usersCollection.findOne({ name: req.cookies.username });
-
-    await postsCollection.insertOne({
-      name: req.cookies.username || "名前のない呟き者",
-      icon: user?.icon || "",
-      content: req.body.content,
-      image: imageData,
-      time: new Date(),
-      likes: 0
-    });
-
-    res.redirect("/");
-  } catch (e) {
-    res.send("投稿エラー: " + e);
-  }
+  res.redirect("/");
 });
 
-// 👍 いいね
-app.post("/like", async (req, res) => {
-  try {
-    await postsCollection.updateOne(
-      { _id: new ObjectId(req.body.id) },
-      { $inc: { likes: 1 } }
-    );
-    res.redirect("/");
-  } catch (e) {
-    res.send("いいねエラー: " + e);
-  }
+/* ユーザー設定 */
+app.post("/setuser", upload.single("icon"), (req, res) => {
+  username = req.body.name;
+  if (req.file) usericon = "/uploads/" + req.file.filename;
+  res.redirect("/");
 });
 
-// 🗑️ 削除
+/* 削除 */
 app.post("/delete", async (req, res) => {
-  try {
-    if (req.body.pass === ADMIN_PASS) {
-      await postsCollection.deleteOne({
-        _id: new ObjectId(req.body.id)
-      });
-    }
-    res.redirect("/");
-  } catch (e) {
-    res.send("削除エラー: " + e);
+  if (req.body.pass === ADMIN_PASS) {
+    await db.collection("posts").deleteOne({
+      _id: new ObjectId(req.body.id)
+    });
   }
+  res.redirect("/");
 });
 
-// 🚀 起動
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("起動成功✨");
+/* 起動 */
+app.listen(3000, () => {
+  console.log("起動できたよ");
 });
