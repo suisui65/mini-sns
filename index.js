@@ -1,23 +1,25 @@
 const express = require("express");
 const { MongoClient, ObjectId } = require("mongodb");
 const multer = require("multer");
+const cookieParser = require("cookie-parser");
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-// 🔥 MongoDB URL（自分のに変更）
+// 🔥 MongoDB URL
 const uri = "mongodb+srv://suisui:suisui@keigiban.qmrxf6o.mongodb.net/?appName=KEIGIBAN";
 const client = new MongoClient(uri);
 
 let postsCollection = null;
 
-// 画像（メモリ保存）
+// 画像アップロード
 const upload = multer({ storage: multer.memoryStorage() });
 
 // 管理者パス
 const ADMIN_PASS = "0725";
 
-// 🔥 DB接続（落ちない仕様）
+// DB接続（落ちない）
 async function start() {
   try {
     await client.connect();
@@ -34,16 +36,28 @@ start().catch(console.error);
 app.get("/", async (req, res) => {
   try {
     if (!postsCollection) {
-      return res.send("DB接続中...少し待って更新してね");
+      return res.send("DB接続中...更新してね");
     }
 
     const posts = await postsCollection.find().sort({ _id: -1 }).toArray();
 
-    let html = `
-      <h1>ミニSNS🔥</h1>
+    const username = req.cookies.username || "";
+    const usericon = req.cookies.usericon || "";
 
+    let html = `
+      <h1>ミニSNS🌠</h1>
+
+      <h3>👤 ユーザー設定</h3>
+      <form method="POST" action="/setuser" enctype="multipart/form-data">
+        名前: <input name="name" value="${username}" required><br>
+        アイコン: <input type="file" name="icon"><br>
+        <button>設定</button>
+      </form>
+
+      <hr>
+
+      <h3>📝 投稿</h3>
       <form method="POST" action="/post" enctype="multipart/form-data">
-        名前: <input name="name" required><br>
         内容: <input name="content" required><br>
         画像: <input type="file" name="image"><br>
         <button>投稿</button>
@@ -54,35 +68,54 @@ app.get("/", async (req, res) => {
 
     posts.forEach(p => {
       html += `
-        <div style="margin-bottom:20px;">
-          <b>${p.name}</b>
-          <small>(${new Date(p.time).toLocaleString()})</small><br>
+        <div style="margin-bottom:20px; display:flex; align-items:center;">
+          
+          ${p.icon ? `<img src="${p.icon}" width="40" height="40" style="border-radius:50%; margin-right:10px;">` : "○"}
 
-          ${p.content}<br>
+          <div>
+            <b>${p.name}</b>
+            <small>(${new Date(p.time).toLocaleString()})</small><br>
 
-          ${p.image ? `<img src="${p.image}" width="150">` : ""}
+            ${p.content}<br>
 
-          <br>
-          👍 ${p.likes || 0}
+            ${p.image ? `<img src="${p.image}" width="150">` : ""}
 
-          <form method="POST" action="/like">
-            <input type="hidden" name="id" value="${p._id}">
-            <button>いいね</button>
-          </form>
+            <br>
+            👍 ${p.likes || 0}
 
-          <form method="POST" action="/delete">
-            <input type="hidden" name="id" value="${p._id}">
-            管理者パス: <input name="pass">
-            <button>削除</button>
-          </form>
+            <form method="POST" action="/like">
+              <input type="hidden" name="id" value="${p._id}">
+              <button>いいね</button>
+            </form>
+
+            <form method="POST" action="/delete">
+              <input type="hidden" name="id" value="${p._id}">
+              管理者パス: <input name="pass">
+              <button>削除</button>
+            </form>
+          </div>
         </div>
       `;
     });
 
     res.send(html);
   } catch (e) {
-    res.send("エラー発生: " + e);
+    res.send("エラー: " + e);
   }
+});
+
+// 👤 ユーザー設定
+app.post("/setuser", upload.single("icon"), (req, res) => {
+  let iconData = req.cookies.usericon || "";
+
+  if (req.file) {
+    iconData = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+  }
+
+  res.cookie("username", req.body.name);
+  res.cookie("usericon", iconData);
+
+  res.redirect("/");
 });
 
 // 📤 投稿
@@ -95,7 +128,8 @@ app.post("/post", upload.single("image"), async (req, res) => {
     }
 
     await postsCollection.insertOne({
-      name: req.body.name,
+      name: req.cookies.username || "名無し",
+      icon: req.cookies.usericon || "",
       content: req.body.content,
       image: imageData,
       time: new Date(),
@@ -135,8 +169,8 @@ app.post("/delete", async (req, res) => {
   }
 });
 
-// 🔥 起動（これ重要）
+// 🚀 起動
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("起動成功した🔥");
+  console.log("起動成功🌠");
 });
