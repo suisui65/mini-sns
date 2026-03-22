@@ -13,13 +13,16 @@ const client = new MongoClient(uri);
 
 let postsCollection = null;
 
-// 画像アップロード
-const upload = multer({ storage: multer.memoryStorage() });
+// 画像アップロード（制限付き）
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 1024 * 1024 * 2 } // 2MBまで
+});
 
 // 管理者パス
 const ADMIN_PASS = "0725";
 
-// DB接続（落ちない）
+// DB接続
 async function start() {
   try {
     await client.connect();
@@ -36,7 +39,7 @@ start().catch(console.error);
 app.get("/", async (req, res) => {
   try {
     if (!postsCollection) {
-      return res.send("DB接続中...更新してね");
+      return res.send("DB接続中...");
     }
 
     const posts = await postsCollection.find().sort({ _id: -1 }).toArray();
@@ -45,7 +48,7 @@ app.get("/", async (req, res) => {
     const usericon = req.cookies.usericon || "";
 
     let html = `
-      <h1>ミニSNS🌠</h1>
+      <h1>🌠ミニSNS🌠</h1>
 
       <h3>👤 ユーザー設定</h3>
       <form method="POST" action="/setuser" enctype="multipart/form-data">
@@ -68,9 +71,12 @@ app.get("/", async (req, res) => {
 
     posts.forEach(p => {
       html += `
-        <div style="margin-bottom:20px; display:flex; align-items:center;">
+        <div style="margin-bottom:20px; display:flex; align-items:flex-start;">
           
-          ${p.icon ? `<img src="${p.icon}" width="40" height="40" style="border-radius:50%; margin-right:10px;">` : "○"}
+          ${p.icon 
+            ? `<img src="${p.icon}" width="40" height="40" style="border-radius:50%; object-fit:cover; margin-right:10px;">` 
+            : `<div style="width:40px;height:40px;border-radius:50%;background:#ccc;margin-right:10px;display:flex;align-items:center;justify-content:center;">○</div>`
+          }
 
           <div>
             <b>${p.name}</b>
@@ -104,7 +110,7 @@ app.get("/", async (req, res) => {
   }
 });
 
-// 👤 ユーザー設定
+// 👤 ユーザー設定（修正版）
 app.post("/setuser", upload.single("icon"), (req, res) => {
   let iconData = req.cookies.usericon || "";
 
@@ -112,8 +118,8 @@ app.post("/setuser", upload.single("icon"), (req, res) => {
     iconData = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
   }
 
-  res.cookie("username", req.body.name);
-  res.cookie("usericon", iconData);
+  res.cookie("username", req.body.name, { maxAge: 1000 * 60 * 60 * 24 * 365 });
+  res.cookie("usericon", iconData, { maxAge: 1000 * 60 * 60 * 24 * 365 });
 
   res.redirect("/");
 });
