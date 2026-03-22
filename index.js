@@ -8,9 +8,7 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
-app.use("/uploads", express.static("uploads"));
 
-/* 🔥 メモリ保存（画像をBase64で扱う） */
 const upload = multer();
 
 /* ================================
@@ -99,6 +97,23 @@ app.get("/", async (req, res) => {
   .delete{font-size:10px;margin-left:5px;}
   .time{font-size:10px;color:#888;}
   img.post-img{max-width:200px;margin-top:5px;border-radius:6px;}
+
+  .modal{
+    display:none;
+    position:fixed;
+    top:0;left:0;
+    width:100%;height:100%;
+    background:rgba(0,0,0,0.5);
+    justify-content:center;
+    align-items:center;
+  }
+
+  .modal-box{
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    width:320px;
+  }
   </style>
 
   <div class="topbar">
@@ -111,12 +126,13 @@ app.get("/", async (req, res) => {
     </form>
 
     <div class="user-box">
-      <div>${username || "ユーザー未設定"}</div>
+      <div>${username || "我輩に名がない..."}</div>
       ${
         usericon
         ? `<img class="user-icon" src="${usericon}">`
         : `<div class="user-icon" style="background:#ccc;display:flex;align-items:center;justify-content:center;">○</div>`
       }
+      <button onclick="toggleSettings()">⚙</button>
     </div>
   </div>
 
@@ -157,29 +173,87 @@ app.get("/", async (req, res) => {
   html += `
   </div>
 
-  <hr>
+  <!-- ⚙ 設定モーダル -->
+  <div id="settings" class="modal">
+    <div class="modal-box">
 
-  <h3>ユーザー設定</h3>
-  <form method="POST" action="/setuser" enctype="multipart/form-data">
-    名前 <input name="name">
-    アイコン <input type="file" name="icon">
-    <button>設定</button>
-  </form>
+      <div style="display:flex;gap:5px;margin-bottom:10px;">
+        <button onclick="showTab('name')">名前変更</button>
+        <button onclick="showTab('icon')">アイコン変更</button>
+        <button onclick="showTab('admin')">管理者</button>
+      </div>
 
-  <hr>
+      <div id="tab-name">
+        <form method="POST" action="/setuser">
+          <input name="name" placeholder="名前"><br><br>
+          <button>保存</button>
+        </form>
+      </div>
 
-  <h3>管理者設定</h3>
-  <form method="POST" action="/setbg" enctype="multipart/form-data">
-    背景 <input type="file" name="bg">
-    パス <input name="pass">
-    <button>変更</button>
-  </form>
+      <div id="tab-icon" style="display:none;">
+        <form method="POST" action="/setuser" enctype="multipart/form-data">
+          <input type="file" name="icon"><br><br>
+          <button>保存</button>
+        </form>
+      </div>
 
-  <form method="POST" action="/seticon" enctype="multipart/form-data">
-    アイコン <input type="file" name="icon">
-    パス <input name="pass">
-    <button>変更</button>
-  </form>
+      <div id="tab-admin" style="display:none;">
+        <div id="admin-lock">
+          <input id="admin-pass" type="password" placeholder="パスワード"><br><br>
+          <button onclick="checkAdmin()">入る</button>
+        </div>
+
+        <div id="admin-panel" style="display:none;">
+          <form method="POST" action="/setbg" enctype="multipart/form-data">
+            背景<br>
+            <input type="file" name="bg"><br><br>
+            <input type="hidden" name="pass" id="hidden-pass">
+            <button>変更</button>
+          </form>
+
+          <hr>
+
+          <form method="POST" action="/seticon" enctype="multipart/form-data">
+            アイコン<br>
+            <input type="file" name="icon"><br><br>
+            <input type="hidden" name="pass" id="hidden-pass2">
+            <button>変更</button>
+          </form>
+        </div>
+      </div>
+
+      <br>
+      <button onclick="toggleSettings()">閉じる</button>
+    </div>
+  </div>
+
+  <script>
+  function toggleSettings(){
+    const s = document.getElementById("settings");
+    s.style.display = (s.style.display === "flex") ? "none" : "flex";
+  }
+
+  function showTab(tab){
+    document.getElementById("tab-name").style.display = "none";
+    document.getElementById("tab-icon").style.display = "none";
+    document.getElementById("tab-admin").style.display = "none";
+    document.getElementById("tab-" + tab).style.display = "block";
+  }
+
+  function checkAdmin(){
+    const pass = document.getElementById("admin-pass").value;
+
+    if(pass === "${ADMIN_PASS}"){
+      document.getElementById("admin-lock").style.display = "none";
+      document.getElementById("admin-panel").style.display = "block";
+
+      document.getElementById("hidden-pass").value = pass;
+      document.getElementById("hidden-pass2").value = pass;
+    } else {
+      alert("パスワード違う");
+    }
+  }
+  </script>
   `;
 
   res.send(html);
@@ -195,7 +269,7 @@ app.post("/post", upload.single("image"), async (req, res) => {
   }
 
   await db.collection("posts").insertOne({
-    name: req.cookies.name || "我輩には名がない...",
+    name: req.cookies.name || "我輩に名がない...",
     icon: req.cookies.icon || "",
     content: req.body.content,
     image,
