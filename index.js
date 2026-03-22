@@ -12,8 +12,9 @@ const uri = "mongodb+srv://suisui:suisui@keigiban.qmrxf6o.mongodb.net/?appName=K
 const client = new MongoClient(uri);
 
 let postsCollection = null;
+let usersCollection = null;
 
-// 画像アップロード（2MB制限）
+// 画像アップロード
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: { fileSize: 1024 * 1024 * 2 }
@@ -28,6 +29,7 @@ async function start() {
     await client.connect();
     const db = client.db("sns");
     postsCollection = db.collection("posts");
+    usersCollection = db.collection("users");
     console.log("DB接続OK");
   } catch (e) {
     console.error("DB接続エラー:", e);
@@ -43,12 +45,10 @@ app.get("/", async (req, res) => {
     }
 
     const posts = await postsCollection.find().sort({ _id: -1 }).toArray();
-
     const username = req.cookies.username || "";
-    const usericon = req.cookies.usericon || "";
 
     let html = `
-      <h1>🌟ミニSNS🌟</h1>
+      <h1>ミニSNS🔥（完全版）</h1>
 
       <h3>👤 ユーザー設定</h3>
       <form method="POST" action="/setuser" enctype="multipart/form-data">
@@ -61,9 +61,6 @@ app.get("/", async (req, res) => {
 
       <h3>📝 投稿</h3>
       <form method="POST" action="/post" enctype="multipart/form-data">
-        <input type="hidden" name="name" value="${username}">
-        <input type="hidden" name="icon" value="${usericon}">
-        
         内容: <input name="content" required><br>
         画像: <input type="file" name="image"><br>
         <button>投稿</button>
@@ -74,11 +71,11 @@ app.get("/", async (req, res) => {
 
     posts.forEach(p => {
       html += `
-        <div style="margin-bottom:20px; display:flex; align-items:flex-start;">
+        <div style="margin-bottom:20px; display:flex;">
           
           ${p.icon 
-            ? `<img src="${p.icon}" width="40" height="40" style="border-radius:50%; object-fit:cover; margin-right:10px;">` 
-            : `<div style="width:40px;height:40px;border-radius:50%;background:#ccc;margin-right:10px;display:flex;align-items:center;justify-content:center;">○</div>`
+            ? `<img src="${p.icon}" width="40" height="40" style="border-radius:50%; margin-right:10px;">`
+            : `<div style="width:40px;height:40px;border-radius:50%;background:#ccc;display:flex;align-items:center;justify-content:center;margin-right:10px;">○</div>`
           }
 
           <div>
@@ -113,21 +110,29 @@ app.get("/", async (req, res) => {
   }
 });
 
-// 👤 ユーザー設定
-app.post("/setuser", upload.single("icon"), (req, res) => {
-  let iconData = req.cookies.usericon || "";
+// 👤 ユーザー設定（DB保存）
+app.post("/setuser", upload.single("icon"), async (req, res) => {
+  try {
+    let iconData = "";
 
-  if (req.file) {
-    iconData = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+    if (req.file) {
+      iconData = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+    }
+
+    await usersCollection.updateOne(
+      { name: req.body.name },
+      { $set: { icon: iconData } },
+      { upsert: true }
+    );
+
+    res.cookie("username", req.body.name);
+    res.redirect("/");
+  } catch (e) {
+    res.send("ユーザー設定エラー: " + e);
   }
-
-  res.cookie("username", req.body.name, { maxAge: 1000 * 60 * 60 * 24 * 365 });
-  res.cookie("usericon", iconData, { maxAge: 1000 * 60 * 60 * 24 * 365 });
-
-  res.redirect("/");
 });
 
-// 📤 投稿（←ここが修正ポイント）
+// 📤 投稿（DBからアイコン取得）
 app.post("/post", upload.single("image"), async (req, res) => {
   try {
     let imageData = null;
@@ -136,9 +141,11 @@ app.post("/post", upload.single("image"), async (req, res) => {
       imageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
     }
 
+    const user = await usersCollection.findOne({ name: req.cookies.username });
+
     await postsCollection.insertOne({
-      name: req.body.name || "名前のない呟き者",
-      icon: req.body.icon || "",
+      name: req.cookies.username || "名前のない呟き者",
+      icon: user?.icon || "",
       content: req.body.content,
       image: imageData,
       time: new Date(),
@@ -181,5 +188,5 @@ app.post("/delete", async (req, res) => {
 // 🚀 起動
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("起動成功🌟");
+  console.log("起動成功✨");
 });
