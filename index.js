@@ -17,24 +17,33 @@ const ADMIN_PASS = "0725";
 
 /* ================================
    🌐 MongoDB接続URL（ここ書き換えて！）
-   例：
-   mongodb+srv://ユーザー名:パスワード@cluster0.xxxx.mongodb.net/?retryWrites=true&w=majority
 ================================ */
 const MONGO_URL = "mongodb+srv://suisui:suisui@keigiban.qmrxf6o.mongodb.net/?appName=KEIGIBAN";
 /* ================================ */
 
-let db;
+let db = null;
 
-MongoClient.connect(MONGO_URL).then(client => {
-  db = client.db("sns");
-  console.log("DB connected");
-});
+/* ===== MongoDB接続 ===== */
+async function connectDB() {
+  try {
+    const client = await MongoClient.connect(MONGO_URL);
+    db = client.db("sns");
+    console.log("DB connected");
+  } catch (err) {
+    console.error("❌ DB接続失敗:", err);
+  }
+}
+connectDB();
 
 let username = "";
 let usericon = "";
 
 /* ===== トップ ===== */
 app.get("/", async (req, res) => {
+
+  if (!db) {
+    return res.send("⚠️ データベース接続中...");
+  }
 
   const posts = await db.collection("posts")
     .find({})
@@ -56,15 +65,6 @@ app.get("/", async (req, res) => {
   .name{font-weight:bold;}
   .delete{font-size:10px;margin-left:5px;}
   img.post-img{max-width:200px;margin-top:5px;border-radius:6px;}
-
-  .guide{
-    max-width:700px;
-    margin:20px auto;
-    background:white;
-    padding:10px;
-    border-radius:8px;
-    font-size:13px;
-  }
   </style>
 
   <div class="topbar">
@@ -84,24 +84,6 @@ app.get("/", async (req, res) => {
         : `<div class="user-icon" style="background:#ccc;display:flex;align-items:center;justify-content:center;">○</div>`
       }
     </div>
-  </div>
-
-  <!-- 🌊 ガイド -->
-  <div class="guide">
-  <b>P-Drum Aqua 9"</b><br>
-  自由に投稿できるSNS🌊<br><br>
-
-  ✏️ 投稿 → 上から書いて「書く」<br>
-  👤 名前・アイコン → 下で設定<br>
-  🗑 CL → 投稿削除（パス必要）<br><br>
-
-  🔑 パスワードの場所👇<br>
-  <code>const ADMIN_PASS = "1234";</code><br>
-  👉 ここを書き換え<br><br>
-
-  🌐 データ保存👇<br>
-  <code>const MONGO_URL = "ここにMongoDBのURL";</code><br>
-  👉 MongoDBのURL貼る
   </div>
 
   <div class="timeline">
@@ -151,10 +133,12 @@ app.get("/", async (req, res) => {
 
 /* 投稿 */
 app.post("/post", upload.single("image"), async (req, res) => {
+  if (!db) return res.send("DB未接続");
+
   const image = req.file ? "/uploads/" + req.file.filename : "";
 
   await db.collection("posts").insertOne({
-    name: username || "我輩には名がない",
+    name: username || "我輩には名はない",
     icon: usericon,
     content: req.body.content,
     image
@@ -172,15 +156,19 @@ app.post("/setuser", upload.single("icon"), (req, res) => {
 
 /* 削除 */
 app.post("/delete", async (req, res) => {
+  if (!db) return res.redirect("/");
+
   if (req.body.pass === ADMIN_PASS) {
     await db.collection("posts").deleteOne({
       _id: new ObjectId(req.body.id)
     });
   }
+
   res.redirect("/");
 });
 
 /* 起動 */
-app.listen(3000, () => {
-  console.log("起動できたよ");
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("🌊 Server running on port " + PORT);
 });
