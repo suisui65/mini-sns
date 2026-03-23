@@ -9,29 +9,21 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-/* 🔥 メモリ保存（DB用） */
 const upload = multer();
 
-/* ================================
-   🔑 管理者パスワード（変更してOK）
-================================ */
+/* 🔑 管理者パス */
 const ADMIN_PASS = "0725";
 
-/* ================================
-   🌐 MongoDB URL（ここに入れる）
-================================ */
+/* 🌐 MongoDB */
 const MONGO_URL = "mongodb+srv://suisui:suisui@keigiban.qmrxf6o.mongodb.net/?appName=KEIGIBAN";
-/* ================================ */
 
 let db;
 let settingsCollection;
 
-/* ===== DB接続 ===== */
 async function connectDB(){
   const client = await MongoClient.connect(MONGO_URL);
   db = client.db("sns");
   settingsCollection = db.collection("settings");
-  console.log("DB接続OK🔥");
 }
 connectDB();
 
@@ -40,11 +32,7 @@ app.get("/", async (req, res) => {
 
   if(!db) return res.send("DB接続中...");
 
-  const posts = await db.collection("posts")
-    .find({})
-    .sort({ _id:-1 })
-    .toArray();
-
+  const posts = await db.collection("posts").find({}).sort({_id:-1}).toArray();
   const bg = await settingsCollection.findOne({type:"bg"});
   const appIcon = await settingsCollection.findOne({type:"icon"});
 
@@ -58,11 +46,65 @@ app.get("/", async (req, res) => {
     font-family:sans-serif;
     background-image:url('${bg?.image || ""}');
     background-size:cover;
+    background-position:center;
+    background-attachment:fixed;
   }
-  .topbar{display:flex;align-items:center;background:#fff;padding:10px;}
+
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:10px;
+    background:rgba(255,255,255,0.2);
+    backdrop-filter:blur(10px);
+  }
+
   .app-icon{width:40px;height:40px;border-radius:50%;}
   .user-icon{width:35px;height:35px;border-radius:50%;}
-  .post{background:#fff;margin:10px;padding:10px;border-radius:8px;}
+
+  .timeline{
+    max-width:600px;
+    margin:20px auto;
+  }
+
+  .post{
+    margin:10px;
+    padding:12px;
+    border-radius:10px;
+    display:flex;
+    gap:10px;
+    background:rgba(255,255,255,0.2);
+    backdrop-filter:blur(8px);
+    box-shadow:0 4px 10px rgba(0,0,0,0.2);
+  }
+
+  .time{
+    font-size:10px;
+    color:#ddd;
+  }
+
+  img{border-radius:8px;}
+
+  button{
+    cursor:pointer;
+  }
+
+  .modal{
+    display:none;
+    position:fixed;
+    top:0;left:0;
+    width:100%;height:100%;
+    background:rgba(0,0,0,0.5);
+    justify-content:center;
+    align-items:center;
+  }
+
+  .modal-box{
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    width:320px;
+  }
   </style>
 
   <div class="topbar">
@@ -74,33 +116,62 @@ app.get("/", async (req, res) => {
       <button>投稿</button>
     </form>
 
-    <div style="margin-left:auto">
+    <div>
       ${username || "我輩に名がない..."}
       ${
         usericon
         ? `<img class="user-icon" src="${usericon}">`
         : "○"
       }
-      <button onclick="toggle()">⚙️</button>
+      <button onclick="toggle()">⚙</button>
     </div>
   </div>
+
+  <div class="timeline">
   `;
 
   posts.forEach(p=>{
     html += `
     <div class="post">
-      <b>${p.name}</b><br>
-      <small>${new Date(p.time).toLocaleString("ja-JP")}</small><br>
-      ${p.content}<br>
-      ${p.image ? `<img src="${p.image}" width="150">`:""}
+      ${
+        p.icon
+        ? `<img src="${p.icon}" style="width:40px;height:40px;border-radius:50%;">`
+        : "○"
+      }
+
+      <div>
+        <b>${p.name}</b>
+
+        <form method="POST" action="/delete" style="display:inline;">
+          <input type="hidden" name="id" value="${p._id}">
+          <input name="pass" placeholder="CL" style="width:40px;">
+          <button>🆑</button>
+        </form>
+
+        <div class="time">
+          ${new Date(p.time).toLocaleString("ja-JP")}
+        </div>
+
+        <div>${p.content}</div>
+        ${p.image ? `<img src="${p.image}" width="150">` : ""}
+
+        <!-- 👍いいね -->
+        <form method="POST" action="/like">
+          <input type="hidden" name="id" value="${p._id}">
+          <button>👍 ${p.likes || 0}</button>
+        </form>
+
+      </div>
     </div>
     `;
   });
 
   html += `
+  </div>
+
   <!-- 設定 -->
-  <div id="s" style="display:none;position:fixed;top:0;width:100%;height:100%;background:#0008;">
-    <div style="background:#fff;margin:100px auto;padding:20px;width:300px">
+  <div id="s" class="modal">
+    <div class="modal-box">
 
       <button onclick="tab('n')">名前</button>
       <button onclick="tab('i')">アイコン</button>
@@ -109,14 +180,14 @@ app.get("/", async (req, res) => {
       <div id="n">
         <form method="POST" action="/setuser">
           <input name="name">
-          <button>確定</button>
+          <button>保存</button>
         </form>
       </div>
 
       <div id="i" style="display:none">
         <form method="POST" action="/setuser" enctype="multipart/form-data">
           <input type="file" name="icon">
-          <button>確定</button>
+          <button>保存</button>
         </form>
       </div>
 
@@ -139,6 +210,7 @@ app.get("/", async (req, res) => {
         </div>
       </div>
 
+      <br>
       <button onclick="toggle()">閉じる</button>
     </div>
   </div>
@@ -146,7 +218,7 @@ app.get("/", async (req, res) => {
   <script>
   function toggle(){
     const e=document.getElementById("s");
-    e.style.display = e.style.display==="block"?"none":"block";
+    e.style.display = e.style.display==="flex"?"none":"flex";
   }
 
   function tab(t){
@@ -168,12 +240,11 @@ app.get("/", async (req, res) => {
   res.send(html);
 });
 
-/* ===== 投稿 ===== */
+/* 投稿 */
 app.post("/post", upload.single("image"), async (req,res)=>{
-
   let image="";
   if(req.file){
-    image = "data:"+req.file.mimetype+";base64,"+req.file.buffer.toString("base64");
+    image="data:"+req.file.mimetype+";base64,"+req.file.buffer.toString("base64");
   }
 
   await db.collection("posts").insertOne({
@@ -181,18 +252,25 @@ app.post("/post", upload.single("image"), async (req,res)=>{
     icon:req.cookies.icon || "",
     content:req.body.content,
     image,
-    time:Date.now()
+    time:Date.now(),
+    likes:0 // 👍追加
   });
 
   res.redirect("/");
 });
 
-/* ===== ユーザー設定 ===== */
-app.post("/setuser", upload.single("icon"), (req,res)=>{
+/* 👍 いいね */
+app.post("/like", async (req,res)=>{
+  await db.collection("posts").updateOne(
+    {_id:new ObjectId(req.body.id)},
+    {$inc:{likes:1}}
+  );
+  res.redirect("/");
+});
 
-  if(req.body.name){
-    res.cookie("name", req.body.name);
-  }
+/* ユーザー設定 */
+app.post("/setuser", upload.single("icon"), (req,res)=>{
+  if(req.body.name) res.cookie("name", req.body.name);
 
   if(req.file){
     const icon="data:"+req.file.mimetype+";base64,"+req.file.buffer.toString("base64");
@@ -202,7 +280,15 @@ app.post("/setuser", upload.single("icon"), (req,res)=>{
   res.redirect("/");
 });
 
-/* ===== 背景 ===== */
+/* 削除 */
+app.post("/delete", async (req,res)=>{
+  if(req.body.pass===ADMIN_PASS){
+    await db.collection("posts").deleteOne({_id:new ObjectId(req.body.id)});
+  }
+  res.redirect("/");
+});
+
+/* 背景 */
 app.post("/setbg", upload.single("bg"), async (req,res)=>{
   if(req.body.pass!==ADMIN_PASS) return res.send("NG");
 
@@ -217,7 +303,7 @@ app.post("/setbg", upload.single("bg"), async (req,res)=>{
   res.redirect("/");
 });
 
-/* ===== アプリアイコン ===== */
+/* アイコン */
 app.post("/seticon", upload.single("icon"), async (req,res)=>{
   if(req.body.pass!==ADMIN_PASS) return res.send("NG");
 
@@ -232,4 +318,4 @@ app.post("/seticon", upload.single("icon"), async (req,res)=>{
   res.redirect("/");
 });
 
-app.listen(3000, ()=>console.log("🌊 完成SNS起動"));
+app.listen(3000, ()=>console.log("🌊 いいねSNS完成"));
