@@ -19,11 +19,14 @@ const MONGO_URL = "mongodb+srv://suisui:suisui@keigiban.qmrxf6o.mongodb.net/?app
 
 let db;
 let settingsCollection;
+let usersCollection;
 
+/* ===== DB接続 ===== */
 async function connectDB(){
   const client = await MongoClient.connect(MONGO_URL);
   db = client.db("sns");
   settingsCollection = db.collection("settings");
+  usersCollection = db.collection("users");
 }
 connectDB();
 
@@ -37,7 +40,6 @@ app.get("/", async (req, res) => {
   const appIcon = await settingsCollection.findOne({type:"icon"});
 
   const username = req.cookies.name;
-  const usericon = req.cookies.icon;
 
   let html = `
   <style>
@@ -85,10 +87,6 @@ app.get("/", async (req, res) => {
 
   img{border-radius:8px;}
 
-  button{
-    cursor:pointer;
-  }
-
   .modal{
     display:none;
     position:fixed;
@@ -118,11 +116,7 @@ app.get("/", async (req, res) => {
 
     <div>
       ${username || "我輩に名がない..."}
-      ${
-        usericon
-        ? `<img class="user-icon" src="${usericon}">`
-        : "○"
-      }
+      <img class="user-icon" src="/me/icon">
       <button onclick="toggle()">⚙</button>
     </div>
   </div>
@@ -149,13 +143,18 @@ app.get("/", async (req, res) => {
         </form>
 
         <div class="time">
-          ${new Date(p.time).toLocaleString("ja-JP")}
+          ${new Date(p.time).toLocaleString("ja-JP", {
+            timeZone: "Asia/Tokyo",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit"
+          })}
         </div>
 
         <div>${p.content}</div>
         ${p.image ? `<img src="${p.image}" width="150">` : ""}
 
-        <!-- 👍いいね -->
         <form method="POST" action="/like">
           <input type="hidden" name="id" value="${p._id}">
           <button>👍 ${p.likes || 0}</button>
@@ -240,26 +239,39 @@ app.get("/", async (req, res) => {
   res.send(html);
 });
 
-/* 投稿 */
+/* ===== 自分のアイコン ===== */
+app.get("/me/icon", async (req,res)=>{
+  const name = req.cookies.name;
+  if(!name) return res.send("");
+
+  const user = await usersCollection.findOne({ name });
+  res.send(user?.icon || "");
+});
+
+/* ===== 投稿 ===== */
 app.post("/post", upload.single("image"), async (req,res)=>{
+
+  const name = req.cookies.name || "我輩に名がない...";
+  const user = await usersCollection.findOne({ name });
+
   let image="";
   if(req.file){
     image="data:"+req.file.mimetype+";base64,"+req.file.buffer.toString("base64");
   }
 
   await db.collection("posts").insertOne({
-    name:req.cookies.name || "我輩に名がない...",
-    icon:req.cookies.icon || "",
+    name,
+    icon:user?.icon || "",
     content:req.body.content,
     image,
     time:Date.now(),
-    likes:0 // 👍追加
+    likes:0
   });
 
   res.redirect("/");
 });
 
-/* 👍 いいね */
+/* 👍 */
 app.post("/like", async (req,res)=>{
   await db.collection("posts").updateOne(
     {_id:new ObjectId(req.body.id)},
@@ -268,19 +280,29 @@ app.post("/like", async (req,res)=>{
   res.redirect("/");
 });
 
-/* ユーザー設定 */
-app.post("/setuser", upload.single("icon"), (req,res)=>{
-  if(req.body.name) res.cookie("name", req.body.name);
+/* 👤 設定 */
+app.post("/setuser", upload.single("icon"), async (req,res)=>{
+
+  const name = req.body.name || req.cookies.name || "我輩に名がない...";
+  res.cookie("name", name);
+
+  let update = {};
 
   if(req.file){
     const icon="data:"+req.file.mimetype+";base64,"+req.file.buffer.toString("base64");
-    res.cookie("icon", icon);
+    update.icon = icon;
   }
+
+  await usersCollection.updateOne(
+    { name },
+    { $set: update },
+    { upsert:true }
+  );
 
   res.redirect("/");
 });
 
-/* 削除 */
+/* 🗑 */
 app.post("/delete", async (req,res)=>{
   if(req.body.pass===ADMIN_PASS){
     await db.collection("posts").deleteOne({_id:new ObjectId(req.body.id)});
@@ -303,7 +325,7 @@ app.post("/setbg", upload.single("bg"), async (req,res)=>{
   res.redirect("/");
 });
 
-/* アイコン */
+/* アプリアイコン */
 app.post("/seticon", upload.single("icon"), async (req,res)=>{
   if(req.body.pass!==ADMIN_PASS) return res.send("NG");
 
@@ -318,4 +340,4 @@ app.post("/seticon", upload.single("icon"), async (req,res)=>{
   res.redirect("/");
 });
 
-app.listen(3000, ()=>console.log("🌊 いいねSNS完成"));
+app.listen(3000, ()=>console.log("🌊 完全完成SNS"));
